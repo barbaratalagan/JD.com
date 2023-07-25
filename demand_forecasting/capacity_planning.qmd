@@ -1,0 +1,142 @@
+---
+title: "Capacity Planning"
+author: "Barbara Talagan"
+format: html
+editor: visual
+---
+
+# Packages
+```{r}
+library(readxl)
+library(openxlsx)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+```
+
+
+# Importing Data
+```{r}
+excel_file <- "JD_March_2018_data.xlsx"
+
+user_data <- read_excel(excel_file, sheet = "User")
+sku_data <- read_excel(excel_file, sheet = "SKU")
+order_data <- read_excel(excel_file, sheet = "Order")
+inventory_data <- read_excel(excel_file, sheet = "Inventory")
+delivery_data <- read_excel(excel_file, sheet = "Delivery")
+network_data <- read_excel(excel_file, sheet = "Network")
+```
+
+# Merging 
+```{r}
+order_delivery <- left_join(order_data, delivery_data, by = "order_ID")
+```
+
+# Capacity Planning
+
+## Mean and StDev Inflow
+```{r}
+mean__std_inflow_day <- order_delivery %>%
+  group_by(order_date, dc_ori, sku_ID) %>%
+  summarize(sum_order_quantity = sum(quantity)) %>%
+  group_by(dc_ori, sku_ID) %>%
+  summarize(avg_hour_quantity = mean(sum_order_quantity),
+            stdev_hour_quantity = sd(sum_order_quantity)) %>%
+  rename(warehouse = dc_ori) #%>%
+  #mutate(stdev_hour_quantity = replace_na(stdev_hour_quantity, 0))
+  
+```
+
+
+## Mean and StDev Outflow
+
+```{r}
+mean_std_outflow_day <- order_delivery %>%
+  group_by(order_date, dc_des, sku_ID) %>%
+  summarize(sum_order_quantity = sum(quantity)) %>%
+  group_by(dc_des, sku_ID) %>%
+  summarize(avg_hour_quantity = mean(sum_order_quantity),
+            stdev_hour_quantity = sd(sum_order_quantity)) %>%
+  rename(warehouse = dc_des) # %>%
+  #mutate(stdev_hour_quantity = replace_na(stdev_hour_quantity, 0))
+
+```
+
+## Putting the data into the capacity planning excel template "Part 2 Scaling"
+
+```{r}
+# Perform left join to merge the two dataframes
+capacity_data <- left_join(mean__std_inflow, mean_std_outflow, by = c("warehouse", "sku_ID")) 
+
+# Calculate net demand mean and standard deviation
+capacity_data <- capacity_data %>%
+  mutate(
+    net_demand_mean = ((avg_hour_quantity.x - avg_hour_quantity.y)),
+    net_demand_std = sqrt((stdev_hour_quantity.x^2 + stdev_hour_quantity.y^2))
+  ) %>%
+  select(
+    warehouse, sku_ID, time_slot,
+    inflow_mean = avg_hour_quantity.x,
+    inflow_std = stdev_hour_quantity.x,
+    outflow_mean = avg_hour_quantity.y,
+    outflow_std = stdev_hour_quantity.y,
+    net_demand_mean,
+    net_demand_std
+  )
+
+# Reorder columns as per your template
+capacity_data <- capacity_data %>%
+  select(warehouse, sku_ID, inflow_mean, inflow_std, outflow_mean, outflow_std, net_demand_mean, net_demand_std)
+```
+
+## Adding more scaling variables and performance metrics
+
+```{r}
+# Change to your desired lead time
+desired_lead_time = 7 #days
+
+capacity_data <- capacity_data %>%
+        # Adding more scaling variables
+  mutate(service_rate = 0.95,
+         z_score = qnorm(service_rate),
+         safety_stock = (net_demand_mean + net_demand_std * z_score),
+         # Performance metrics
+         probability_stockout = (1- service_rate),
+         stand_loss_function = (-z_score*(1-pnorm(z_score)) + dnorm(z_score, 0, 1)),
+         exp_lost_sales = (net_demand_std * stand_loss_function),
+         exp_sales = (net_demand_mean - exp_lost_sales),
+         exp_excess_inventory = (safety_stock - exp_sales),
+         # Lead time metrics
+         lead_time = desired_lead_time,
+         stdev_lead_time = 1.25,
+         mean_lead_time_demand = (inflow_mean * lead_time),
+         stdev_lead_time_demand = (lead_time * inflow_std * inflow_std + (inflow_mean^2) * (stdev_lead_time^2)),
+         order_up_to_level = (mean_lead_time_demand + z_score * stdev_lead_time_demand)) 
+```
+
+## Finding top 5 products and top 5 warehouses
+
+```{r}
+# Top 5 largest products by total exp_sales
+top_5_products <- capacity_data %>%
+  group_by(sku_ID) %>%
+  summarize(total_exp_sales = sum(exp_sales)) %>%
+  arrange(desc(total_exp_sales)) %>%
+  head(5)
+top_5_products
+
+# Top 5 warehouses by total exp_sales
+top_5_warehouses <- capacity_data %>%
+  group_by(warehouse) %>%
+  summarize(total_exp_sales = sum(exp_sales)) %>%
+  arrange(desc(total_exp_sales)) %>%
+  head(5)
+top_5_warehouses
+
+```
+
+```{r}
+write.xlsx(capacity_data, "capacity_planning.xlsx")
+```
+
