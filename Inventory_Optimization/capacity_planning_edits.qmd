@@ -1,0 +1,141 @@
+---
+title: "capactiy_planning_edits"
+author: "Barbara Talagan"
+format: html
+editor: visual
+---
+
+# Info
+
+This code reflects the suggestions from the Professor. 
+
+Professor's suggestions:
+
+(i) what is the total order up to level at each warehouse and for each product category;
+    Cannot do so because all of our data is from the same product category
+    Solution: Will show top 5 warehouses, top 5 products safety stock levels, costs, and order-up-levels on interactive dashboard on          Tableau
+
+(ii) how does this compare with their previous levels of inventory
+    Cannot do so we have very VERY limited data: One single month of time series data and no information on how JD.com optimized their        inventory in the past 
+    Solution: Outside research?
+
+# Packages
+
+```{r}
+library(readxl)
+library(openxlsx)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+```
+
+# Importing Data
+
+```{r}
+excel_file <- "JD_March_2018_data.xlsx"
+
+user_data <- read_excel(excel_file, sheet = "User")
+sku_data <- read_excel(excel_file, sheet = "SKU")
+order_data <- read_excel(excel_file, sheet = "Order")
+inventory_data <- read_excel(excel_file, sheet = "Inventory")
+delivery_data <- read_excel(excel_file, sheet = "Delivery")
+network_data <- read_excel(excel_file, sheet = "Network")
+```
+
+# Filtering Out 3P Products
+
+```{r}
+# Have to filter out 3P products because JD.com does not have control over them
+data <- order_data %>%
+  filter(type == 1) 
+```
+
+# Capacity Planning
+
+No inflows needed with this example
+
+## Mean and StDev Outflow
+
+```{r}
+# To find daily mean day 1 + day 2 + day 3 ... day 31 / 31
+
+mean_std_outflow_day <- data %>%
+  # Finding the total daily demand by warehouse and product
+  group_by(order_date, dc_des, sku_ID) %>%
+  summarize(sum_order_quantity = sum(quantity),
+            avg_price = mean(original_unit_price)) %>%
+  group_by(dc_des, sku_ID) %>%
+  # Finding the average daily demand by warehouse and product
+  summarize(demand_mean = mean(sum_order_quantity),
+            stdev_mean = sd(sum_order_quantity),
+            avg_price = mean(avg_price)) %>%
+  rename(warehouse = dc_des)
+```
+
+## Optimizing Inventory
+
+```{r}
+# Change to your desired lead time
+desired_lead_time = 7 #days
+
+capacity_data <- mean_std_outflow_day %>%
+        # Adding more scaling variables
+  mutate(service_rate = 0.95,
+         z_score = qnorm(service_rate),
+         safety_stock = (demand_mean + stdev_mean * z_score),
+         # Performance metrics
+         probability_stockout = (1- service_rate),
+         stand_loss_function = (-z_score*(1-pnorm(z_score)) + dnorm(z_score, 0, 1)),
+         exp_lost_sales = (stdev_mean * stand_loss_function),
+         exp_sales = (demand_mean - exp_lost_sales),
+         exp_excess_inventory = (safety_stock - exp_sales),
+         # Lead time metrics
+         lead_time = desired_lead_time,
+         stdev_lead_time = 0,
+         mean_lead_time_demand = (demand_mean * lead_time),
+         stdev_lead_time_demand = 0,
+         order_up_to_level = (mean_lead_time_demand + z_score * stdev_lead_time_demand),
+         # Cost Optimization
+         profit_margin = .13,
+         cost = (avg_price / (1 + profit_margin)),
+         holding_cost = (cost * .30),
+         goodwill_cost = (cost * .50),
+         cost_of_excess_inventory = (holding_cost * exp_excess_inventory),
+         cost_of_lost_sales = (goodwill_cost * exp_lost_sales),
+         total_cost = cost_of_excess_inventory + cost_of_lost_sales)
+```
+
+# Slide summary stats
+```{r}
+inventory_slide_stats <- capacity_data %>%
+  summarise(demand_mean = sum(demand_mean, na.rm = TRUE),
+            safety_stock = sum(safety_stock, na.rm = TRUE),
+            order_up_to_level = sum(order_up_to_level, na.rm = TRUE),
+            total_cost = sum(total_cost, na.rm = TRUE))
+
+totals <- inventory_slide_stats %>%
+  summarise(total_demand = sum(demand_mean),
+            total_safety = sum(safety_stock),
+            total_order = sum(order_up_to_level),
+            total_costs = sum(total_cost))
+totals
+# total_demand total_safety  total_order   total_costs
+#   32,152.75    63,534.67	   225,069.2	   1,001,393	
+
+num_of_warehouses <- length(unique(capacity_data$warehouse))
+num_of_warehouses
+#60
+
+num_of_products <- length(unique(capacity_data$sku_ID))
+num_of_products
+# 328
+```
+```{r}
+#write.xlsx(capacity_data, "revised_results.xlsx")
+```
+
+
+
+
+
