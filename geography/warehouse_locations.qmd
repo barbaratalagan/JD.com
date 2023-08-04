@@ -1,0 +1,66 @@
+---
+title: "city_analysis"
+format: html
+editor: visual
+---
+
+# Packages
+
+```{r}
+library(readxl)
+library(openxlsx)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(lubridate)
+```
+
+# Importing Data
+
+```{r}
+excel_file <- "JD_March_2018_data.xlsx"
+
+user_data <- read_excel(excel_file, sheet = "User")
+sku_data <- read_excel(excel_file, sheet = "SKU")
+order_data <- read_excel(excel_file, sheet = "Order")
+inventory_data <- read_excel(excel_file, sheet = "Inventory")
+delivery_data <- read_excel(excel_file, sheet = "Delivery")
+network_data <- read_excel(excel_file, sheet = "Network")
+```
+
+```{r}
+dc_locations <- network_data %>%
+  group_by(region_ID) %>%
+  summarize(count = n())
+```
+
+```{r}
+order <- order_data %>%
+  rename(dc_ID = dc_des)
+
+order_user <- left_join(order, user_data, by = "user_ID" )
+order_user_network <- left_join(order_user, network_data, by = "dc_ID")
+```
+
+```{r}
+population_density <- order_user_network %>%
+  filter(city_level > 0) %>%
+  group_by(region_ID, dc_ID, city_level) %>%
+  summarize(count = n())
+
+write.xlsx(population_density, "population.xlsx")
+```
+
+```{r}
+region_city <- order_user_network %>%
+  filter(city_level > 0) %>%
+  group_by(region_ID, city_level) %>%
+  summarise(count = n())
+```
+
+```{r}
+biggest_region <- order_user_network %>%
+  filter(city_level > 0) %>%
+  group_by(region_ID) %>%
+  summarise(count = n())
+```
