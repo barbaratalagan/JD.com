@@ -33,9 +33,11 @@ One month time series data on customers, orders, deliveries, networks, inventory
 
 **Time Series**
 - Limited to one month of time series data (March 2018)
+  
 **Inventory Management:**
 - Inventory holding costs and the quantities of available inventory
-- Inventory order lead time and transportation costs 
+- Inventory order lead time and transportation costs
+  
 **Warehouse capacities:**
 - Information on most 3P (Third Party) products  
 - Order Fulfillment and logistics:
