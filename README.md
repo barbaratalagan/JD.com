@@ -27,12 +27,12 @@ This project aims to optimize JD.com's inventory to improve their fufillment and
 - library(lubridate)
 
 # Data
-One month time series data on customers, orders, deliveries, networks, inventory. 
+One month time series data on customers, orders, deliveries, networks, inventory from March 2018.
 
 *Many data limitations including:*
 
 **Time Series:**
-- Limited to one month of time series data (March 2018)
+- Limited to one month of time series data
   
 **Inventory Management:**
 - Inventory holding costs and the quantities of available inventory
