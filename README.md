@@ -15,8 +15,8 @@ This project aims to optimize JD.com's inventory to improve their fufillment and
 - Total Costs
 
 # Languages
-- R-Studio: Model building and exploratory analysis
-- Python: Exploratory Analysis 
+- **R-Studio:** Model building and exploratory analysis
+- **Python:** Exploratory Analysis 
 
 # R Packages Used for Modeling
 - library(readxl)
