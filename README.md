@@ -31,7 +31,7 @@ One month time series data on customers, orders, deliveries, networks, inventory
 
 *Many data limitations including:*
 
-**Time Series**
+**Time Series:**
 - Limited to one month of time series data (March 2018)
   
 **Inventory Management:**
